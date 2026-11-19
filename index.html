@@ -1,0 +1,1234 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小小兵合唱團</title>
+<style>
+  :root {
+    --bg-top: #16203f;
+    --bg-bottom: #40306a;
+    --text: #f4f0ff;
+    --muted: #b9b0d6;
+    --accent: #ffd84a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+    color: var(--text);
+    background: linear-gradient(var(--bg-top), var(--bg-bottom));
+    display: flex; flex-direction: column;
+    user-select: none; -webkit-user-select: none;
+    overflow: hidden;
+  }
+  header { text-align: center; padding: 18px 16px 4px; }
+  h1 { margin: 0 0 4px; font-size: clamp(20px, 3.6vw, 32px); letter-spacing: .08em; }
+  p.hint { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding: 10px 16px 0; }
+  button, select {
+    font: inherit; font-size: 14px; color: var(--text);
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 999px; padding: 7px 16px; cursor: pointer;
+  }
+  button:hover, select:hover { background: rgba(255,255,255,.2); }
+  select option { color: #222; }
+  #wrap { flex: 1; position: relative; min-height: 0; }
+  #wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .label {
+    position: absolute; transform: translate(-50%, 0); pointer-events: none;
+    text-align: center; font-weight: 700; line-height: 1.25; white-space: nowrap;
+    font-size: clamp(11px, 1.5vw, 17px); text-shadow: 0 2px 4px rgba(0,0,0,.6);
+    transition: color .1s, transform .1s;
+  }
+  .label small { display: block; font-weight: 400; font-size: .72em; color: var(--muted); }
+  .label.on { color: var(--accent); transform: translate(-50%, 0) scale(1.2); }
+  .float {
+    position: absolute; pointer-events: none;
+    font-size: 28px; animation: rise 1.1s ease-out forwards; text-shadow: 0 2px 6px rgba(0,0,0,.5);
+  }
+  @keyframes rise {
+    from { transform: translate(-50%, -50%) rotate(0) scale(.6); opacity: 1; }
+    to   { transform: translate(calc(-50% + var(--dx)), -140px) rotate(var(--rot)) scale(1.3); opacity: 0; }
+  }
+  #panel { max-width: 860px; margin: 10px auto 0; padding: 0 16px; }
+  #panel[hidden] { display: none; }
+  #score { width: 100%; height: 84px; resize: vertical; font: 15px/1.6 Consolas, monospace; color: var(--text);
+           background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.25); border-radius: 10px; padding: 8px 12px; user-select: text; -webkit-user-select: text; }
+  #panel .row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: var(--muted); }
+  #panel input { width: 64px; font: inherit; color: var(--text); background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25); border-radius: 8px; padding: 4px 6px; }
+  #panel select { padding: 4px 10px; }
+  #panel .help { flex: 1 1 320px; line-height: 1.5; }
+  #panel .help b { color: var(--accent); font-family: Consolas, monospace; }
+  #msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--accent); pointer-events: none; line-height: 1.8; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎵 小小兵合唱團</h1>
+  <p class="hint">點任何一隻（或按數字鍵 1–9），他就會接著唱這首歌的下一句——點誰誰唱，你來指揮。按「合唱」則是整團自動唱完整首。</p>
+  <div class="controls">
+    <select id="vowel" aria-label="唱的音">
+      <option value="rand">唱小小兵語</option>
+      <option value="a">只唱「啊」</option>
+      <option value="o">只唱「喔」</option>
+      <option value="i">只唱「咿」</option>
+      <option value="u">只唱「嗚」</option>
+    </select>
+    <select id="song" aria-label="歌曲"></select>
+    <button id="demo">▶ 合唱</button>
+    <button id="edit" aria-expanded="false">✎ 簡譜</button>
+    <button id="rec" title="把整首合唱錄成影片檔下載">⏺ 錄影</button>
+  </div>
+  <div id="panel" hidden>
+    <textarea id="score" spellcheck="false" aria-label="簡譜"></textarea>
+    <div class="row">
+      <label>調 <select id="key"></select></label>
+      <label>速度 <input id="bpm" type="number" min="40" max="240" step="5" value="110"> 拍/分</label>
+      <span class="help">1–7 是 Do–Si，0 是休止。<b>[1]</b> 高八度、<b>(5)</b> 低八度；<b>#4</b> 升、<b>b7</b> 降；<b>-</b> 延長一拍、<b>_</b> 半拍、<b>__</b> 四分之一拍、<b>.</b> 附點、<b>~</b> 連結線（接在前一個同音後面不重唱）、<b>{-3}</b> 從這裡開始整體降 3 個半音（轉調）。空白和 | 只是方便看。</span>
+    </div>
+  </div>
+</header>
+<div id="wrap"><div id="msg">小小兵進場中…</div></div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+const msg = document.getElementById('msg');
+if (location.protocol === 'file:') {
+  msg.innerHTML = '這個頁面要透過本機伺服器開啟才能載入模型。<br>請雙擊同資料夾的 start.bat。';
+  throw new Error('needs http');
+}
+const DEBUG = new URLSearchParams(location.search);
+
+// ---------- 模型（models/ 資料夾）與 9 個位置 ----------
+// idle：平常循環播的動作；breakers：偶爾穿插的小動作（都是動作庫裡的名稱，可以跨模型共用）
+const IDLE_A = 'min_lifeguard_mm_idle_001', IDLE_B = 'min_carl_mm_idle_001';
+const BREAKERS = ['min_lifeguard_mm_idlebreaker_001', 'min_lifeguard_mm_idlebreaker_002', 'min_lifeguard_mm_idlebreaker_003',
+                  'min_jerry_mm_idlebreaker_001', 'min_jerry_mm_idlebreaker_002', 'min_jerry_mm_idlebreaker_003', 'min_jerry_mm_idlebreaker_004',
+                  'min_carl_mm_idlebreaker_001', 'min_carl_mm_idlebreaker_002', 'min_carl_mm_idlebreaker_003'];
+const SING  = 'min_bob_welcome_christmas_carol_001';        // 唱歌：遊戲裡報佳音的動作
+const HELLO = 'mc_010_kevin_mainmenu_welcome_with_banana';  // 打招呼
+const PANIC = 'min_mid_game_crash_butt_on_fire_001';        // 被連續戳太多下：屁股著火亂叫
+// 每隻的個性：
+//   idle / breakers 盡量用自己那套服裝專屬的動作（拳擊手練拳、足球員玩球、資安員操作裝置…）
+//   speed 動作快慢 / look 多愛盯著滑鼠看（0–1）/ hop 唱歌跳多高 / sway 唱歌搖多大 / jaw 嘴張多大
+//   rest 小動作之間隔幾秒 [最短, 最長]（越短越好動）/ pokes 連點幾下才會抓狂（越小越容易被惹毛）
+const J = n => 'min_jerry_mm_idlebreaker_00' + n, C = n => 'min_carl_mm_idlebreaker_00' + n;
+const MODELS = {
+  mummy:     { file: 'minion_mummy.glb',      zh: '木乃伊', trait: '慢吞吞',   idle: IDLE_B, breakers: [C(1), C(2), C(3)],
+               p: { speed: 0.7,  look: 0.5, hop: 0.5, sway: 1.6, jaw: 0.7, rest: [10, 22], pokes: 6 } },
+  dino:      { file: 'minion_dino.glb',       zh: '恐龍裝', trait: '愛裝兇',   idle: 'min_dino_mm_idle_001', breakers: ['min_dino_mm_idlebreaker_001', J(2)],
+               p: { speed: 1.0,  look: 0.8, hop: 1.3, sway: 0.8, jaw: 1.6, rest: [5, 12],  pokes: 5 } },
+  banana:    { file: 'minion_banana_man.glb', zh: '香蕉人', trait: '傻呼呼',   idle: IDLE_B, breakers: ['min_bananaman_mm_idlebreaker_001', J(4), C(1)],
+               p: { speed: 0.85, look: 1.0, hop: 0.8, sway: 1.8, jaw: 1.2, rest: [6, 14],  pokes: 4 } },
+  boxer:     { file: 'minion_boxer.glb',      zh: '拳擊手', trait: '靜不下來', idle: IDLE_A, breakers: ['min_boxer_mm_idlebreaker_001', 'min_boxer_mm_idlebreaker_003', 'min_boxer_mm_idlebreaker_004'],
+               p: { speed: 1.2,  look: 0.7, hop: 1.5, sway: 0.5, jaw: 0.9, rest: [2, 6],   pokes: 8 } },
+  football:  { file: 'minion_football.glb',   zh: '足球員', trait: '熱血',     idle: 'min_football_mm_idle_001', breakers: ['min_football_mm_idlebreaker_001', J(1)],
+               p: { speed: 1.1,  look: 0.9, hop: 1.6, sway: 1.0, jaw: 1.5, rest: [4, 10],  pokes: 6 } },
+  lifeguard: { file: 'minion_lifeguard.glb',  zh: '救生員', trait: '愛現',     idle: 'min_lifeguard_mm_idle_001', breakers: ['min_lifeguard_mm_idlebreaker_001', 'min_lifeguard_mm_idlebreaker_002', 'min_lifeguard_mm_idlebreaker_003'],
+               p: { speed: 1.0,  look: 1.0, hop: 1.0, sway: 1.0, jaw: 1.0, rest: [4, 11],  pokes: 4 } },
+  cybersec:  { file: 'minion_cybersec.glb',   zh: '資安員', trait: '一本正經', idle: 'min_cybersec_mm_idle_001', breakers: ['min_cybersec_mm_idlebreaker_001', 'min_cybersec_mm_idlebreaker_002'],
+               p: { speed: 0.9,  look: 0.3, hop: 0.3, sway: 0.2, jaw: 0.6, rest: [8, 18],  pokes: 5 } },
+  cupid:     { file: 'minion_cupid.glb',      zh: '邱比特', trait: '害羞',     idle: 'min_cupid_mm_idle_001', breakers: [J(1), J(3)],
+               p: { speed: 0.9,  look: 0.6, hop: 0.7, sway: 1.3, jaw: 0.8, rest: [7, 16],  pokes: 2 } },
+  bee:       { file: 'minion_beenion.glb',    zh: '小蜜蜂', trait: '過動',     idle: IDLE_A, breakers: [J(2), J(3), J(4), C(1), C(3)],
+               p: { speed: 1.45, look: 1.0, hop: 1.4, sway: 1.2, jaw: 1.1, rest: [1.5, 5], pokes: 3 } },
+  // 沒有骨架的模型（固定姿勢）也能放，寫法：{ file, zh, trait, static: true, breakers: [], p: {...}, size: 1.3, turn: 0 }
+};
+// 由低音排到高音：嗓音越低沉的站越左邊（唱低音），越尖細的站越右邊（唱高音）
+const SLOTS = ['mummy', 'dino', 'banana', 'boxer', 'football', 'lifeguard', 'cybersec', 'cupid', 'bee'];
+
+// 每個角色自己的嗓音。所有人都唱對的音，只是音色不同：
+//   wave 聲帶波形 / oct 八度（2=高八度）/ formant 聲道大小（越大越尖細、像小孩）/ vib 抖音 [速度, 深度]
+//   scoop 起音從多低滑上來 / attack 起音快慢 / lp 悶住高頻（Hz，0=不悶）/ breath 氣音量
+//   rough 沙啞粗糙 [顫動頻率, 深度] / detune 疊第二個聲音（音分，0=不疊）/ vol 音量
+// 全部都是同一種自然的小小兵嗓音（鋸齒波、高八度、不加機械或沙啞效果），
+// 只在「聲道大小、抖音、起音、氣音」上做一點點差異，像不同的人而不是不同的樂器
+const VOICE = {
+  mummy:     { desc: '嗓音偏厚',   wave: 'sawtooth', oct: 2, formant: 1.26, vib: [6.0, 0.014], scoop: 0.84, attack: 0.045, lp: 0, breath: 0.04, rough: null, detune: 0, vol: 1.0 },
+  dino:      { desc: '嗓音偏厚',   wave: 'sawtooth', oct: 2, formant: 1.30, vib: [6.4, 0.018], scoop: 0.80, attack: 0.035, lp: 0, breath: 0,    rough: null, detune: 0, vol: 1.0 },
+  banana:    { desc: '尾音愛抖',   wave: 'sawtooth', oct: 2, formant: 1.34, vib: [5.6, 0.024], scoop: 0.78, attack: 0.045, lp: 0, breath: 0,    rough: null, detune: 0, vol: 1.0 },
+  boxer:     { desc: '乾淨俐落',   wave: 'sawtooth', oct: 2, formant: 1.36, vib: [6.8, 0.010], scoop: 0.88, attack: 0.025, lp: 0, breath: 0,    rough: null, detune: 0, vol: 1.0 },
+  football:  { desc: '中氣十足',   wave: 'sawtooth', oct: 2, formant: 1.38, vib: [7.2, 0.020], scoop: 0.80, attack: 0.025, lp: 0, breath: 0,    rough: null, detune: 0, vol: 1.1 },
+  lifeguard: { desc: '標準亮嗓',   wave: 'sawtooth', oct: 2, formant: 1.38, vib: [6.8, 0.016], scoop: 0.82, attack: 0.035, lp: 0, breath: 0,    rough: null, detune: 0, vol: 1.0 },
+  cybersec:  { desc: '平穩',       wave: 'sawtooth', oct: 2, formant: 1.42, vib: [6.2, 0.008], scoop: 0.90, attack: 0.035, lp: 0, breath: 0,    rough: null, detune: 0, vol: 1.0 },
+  cupid:     { desc: '輕輕柔柔',   wave: 'sawtooth', oct: 2, formant: 1.46, vib: [6.0, 0.014], scoop: 0.86, attack: 0.06,  lp: 0, breath: 0.08, rough: null, detune: 0, vol: 0.95 },
+  bee:       { desc: '最尖最細',   wave: 'sawtooth', oct: 2, formant: 1.52, vib: [7.6, 0.018], scoop: 0.82, attack: 0.025, lp: 0, breath: 0,    rough: null, detune: 0, vol: 1.0 },
+};
+const voiceOf = i => VOICE[SLOTS[i]] || VOICE.lifeguard;
+
+const SOLFEGE = ['Do', 'Re', 'Mi', 'Fa', 'Sol', 'La', 'Si'];
+const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+const SEMIS   = [0, 2, 4, 5, 7, 9, 11];
+const NOTES = SLOTS.map((id, i) => {
+  const oct = 4 + Math.floor(i / 7), d = i % 7;
+  const midi = 12 * (oct + 1) + SEMIS[d];
+  return {
+    who: MODELS[id], key: String(i + 1),
+    name: (oct > 4 ? '高音 ' : '') + SOLFEGE[d], letter: LETTERS[d] + oct,
+    freq: 440 * Math.pow(2, (midi - 69) / 12),
+    hue: Math.round(i * 360 / 9),
+  };
+});
+const KEYS = NOTES.map(n => n.key);
+const wrap = document.getElementById('wrap');
+
+// ====================== 場景 ======================
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+wrap.appendChild(renderer.domElement);
+const canvas = renderer.domElement;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x6a5a90, 2.2));
+const sun = new THREE.DirectionalLight(0xfff2d8, 2.4);
+sun.position.set(3, 8, 7);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0005;
+Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 6, bottom: -3, near: 1, far: 25 });
+scene.add(sun);
+const rim = new THREE.DirectionalLight(0x88aaff, 0.8);
+rim.position.set(-4, 3, -5);
+scene.add(rim);
+
+const floor = new THREE.Mesh(
+  new THREE.CylinderGeometry(7.4, 7.6, 0.3, 64),
+  new THREE.MeshStandardMaterial({ color: 0x3b2c66, roughness: 0.9 }));
+floor.position.set(0, -0.15, -0.4);
+floor.scale.z = 0.42;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const SPACING = 1.3, HEIGHT = 0.95;     // HEIGHT：角色大小（頭頂大約的高度），想更大更小改這個數字
+const v3 = new THREE.Vector3(), v3b = new THREE.Vector3();
+function toScreen(x, y, z) {
+  v3.set(x, y, z).project(camera);
+  return [(v3.x + 1) / 2 * wrap.clientWidth, (1 - v3.y) / 2 * wrap.clientHeight];
+}
+
+// ---------- 名牌 ----------
+const labels = NOTES.map(n => {
+  const el = document.createElement('div');
+  el.className = 'label';
+  el.innerHTML = `${n.who.zh}<small>${n.who.trait}・${(VOICE[SLOTS[NOTES.indexOf(n)]] || {}).desc || ''}</small><small>鍵 ${n.key}</small>`;
+  wrap.appendChild(el);
+  return el;
+});
+const slotPos = i => ({ x: (i - 4) * SPACING, z: -0.03 * (i - 4) * (i - 4) });
+
+function resize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  const tan = Math.tan(camera.fov * Math.PI / 360);
+  const d = Math.max((SPACING * 9.6 / 2) / (tan * camera.aspect), 1.7 / tan);
+  camera.position.set(0, 1.7, d);
+  camera.lookAt(0, 0.52, 0);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  labels.forEach((el, i) => {
+    const p = slotPos(i);
+    const [sx, sy] = toScreen(p.x, -0.1, p.z + 0.55);
+    el.style.left = sx + 'px'; el.style.top = sy + 'px';
+  });
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ====================== 載入模型 ======================
+const loader = new GLTFLoader();
+const cache = {};
+const loadModel = id => cache[id] || (cache[id] = loader.loadAsync('models/' + MODELS[id].file).then(fixOldMaterials));
+// 有些檔案用的是舊版材質格式（three.js 已不支援，貼圖會變成一片灰），手動把顏色貼圖接回去
+async function fixOldMaterials(gltf) {
+  const defs = gltf.parser.json.materials || [], byName = {};
+  for (const d of defs) {
+    const sg = d.extensions && d.extensions.KHR_materials_pbrSpecularGlossiness;
+    if (!sg) continue;
+    const tex = sg.diffuseTexture ? await gltf.parser.getDependency('texture', sg.diffuseTexture.index) : null;
+    if (tex) tex.colorSpace = THREE.SRGBColorSpace;
+    byName[d.name] = { tex, color: sg.diffuseFactor };
+  }
+  gltf.scene.traverse(o => {
+    const f = o.isMesh && byName[o.material.name];
+    if (!f) return;
+    if (f.tex) o.material.map = f.tex;
+    if (f.color) { o.material.color.setRGB(f.color[0], f.color[1], f.color[2]); if (f.color[3] < 1) { o.material.transparent = true; o.material.opacity = f.color[3]; } }
+    else o.material.color.set(0xffffff);
+    o.material.metalness = 0; o.material.roughness = 0.7; o.material.needsUpdate = true;
+  });
+  return gltf;
+}
+const BONES = { spine: 'Spine1', neck: 'Neck', head: 'Head', jaw: 'JAWL', eyeL: 'EyeLeft', eyeR: 'EyeRight',
+                armL: 'L_UpperArm', armR: 'R_UpperArm', foreL: 'L_Forearm', foreR: 'R_Forearm',
+                lidTL: 'LidTopLeft', lidTR: 'LidTopLeftOpp', lidBL: 'LidBottLeft', lidBR: 'LidBottRight',
+                cornerL: 'CornerLeft', cornerR: 'CornerRigth', cornerLB: 'CornerLeftBott', cornerRB: 'CornerRigthBott',
+                comisL: 'comisLeft', comisR: 'comisRight', lipTL: 'LipLeftTop', lipTR: 'lipRightTop', lipBL: 'lipLeftBottom', lipBR: 'lipRightBottom',
+                pelvis: 'Pelvis', toeL: 'L_Toe0', toeR: 'R_Toe0' };
+const DRIVEN = ['spine', 'neck', 'head', 'jaw', 'eyeL', 'eyeR', 'armL', 'armR', 'foreL', 'foreR', 'lidTL', 'lidTR', 'lidBL', 'lidBR'];
+// 嘴巴周圍的骨頭：唱歌時不用動作檔裡的嘴型，改由程式依照正在唱的母音擺
+const MOUTH = ['jaw', 'cornerL', 'cornerR', 'cornerLB', 'cornerRB', 'comisL', 'comisR', 'lipTL', 'lipTR', 'lipBL', 'lipBR'];
+// 四種嘴型：jaw 下巴張開的角度；wide 嘴角往外拉（正）或往中間收圓（負）
+const VISEME = { a: { jaw: 0.52, wide: 0.2 }, o: { jaw: 0.42, wide: -1.3 }, i: { jaw: 0.22, wide: 1.7 }, u: { jaw: 0.24, wide: -1.9 },
+                 e: { jaw: 0.32, wide: 0.4 }, 'ü': { jaw: 0.18, wide: -1.9 }, 'ê': { jaw: 0.34, wide: 1.1 }, er: { jaw: 0.3, wide: 0 }, ih: { jaw: 0.14, wide: 1.2 },
+                 n: { jaw: 0.1, wide: 0.3 }, ng: { jaw: 0.24, wide: 0.2 }, m: { jaw: 0, wide: 0 }, l: { jaw: 0.2, wide: 0.3 }, r: { jaw: 0.16, wide: -0.8 }, closed: { jaw: 0, wide: 0 } };
+
+// ---------- 共用動作庫 ----------
+// 6 個模型用的是同一副骨架，只是骨頭名稱尾巴的編號不同；把編號拿掉就能互相套用動作
+const LIB = {};
+const ROOTP = {};     // 每個模型「骨架根節點的上一層」的世界矩陣；各檔案朝向不同，跨模型套動作時要換算
+function addToLib(id, clips, scene) {
+  scene.updateMatrixWorld(true);
+  scene.traverse(o => { if (/^Bip001_\d+$/.test(o.name)) ROOTP[id] = o.parent.matrixWorld.clone(); });
+  for (const c of clips) {
+    if (LIB[c.name]) continue;
+    const clip = c.clone();
+    for (const t of clip.tracks) t.name = t.name.replace(/^(Bip001(?:_.+?)?)_\d+\.(\w+)$/, '$1.$2');
+    LIB[c.name] = { id, clip };
+  }
+}
+function action(m, name) {
+  if (!m.mixer) return null;
+  if (m.actions[name]) return m.actions[name];
+  const src = LIB[name];
+  if (!src) return null;
+  const tracks = [];
+  for (const t of src.clip.tracks) {
+    const dot = t.name.lastIndexOf('.'), node = t.name.slice(0, dot), prop = t.name.slice(dot);
+    if (node === 'Bip001' || node.startsWith('Bip001_')) {
+      if (!m.map[node]) continue;
+      const cross = node === 'Bip001' && src.id !== m.id;
+      if (cross && prop === '.position') continue;          // 別的模型的根節點位移不能直接用（各檔案基準點不同，會浮起來或陷進地面）
+      const nt = t.clone(); nt.name = m.map[node] + prop; tracks.push(nt);
+      if (node === 'Bip001' && src.id !== m.id && ROOTP[src.id] && ROOTP[m.id]) {
+        const X = ROOTP[m.id].clone().invert().multiply(ROOTP[src.id]);
+        const xq = new THREE.Quaternion(), xp = new THREE.Vector3(), xs = new THREE.Vector3(), v = nt.values;
+        X.decompose(xp, xq, xs);
+        if (prop === '.quaternion') for (let k = 0; k < v.length; k += 4) { const q = new THREE.Quaternion(v[k], v[k+1], v[k+2], v[k+3]).premultiply(xq); v[k] = q.x; v[k+1] = q.y; v[k+2] = q.z; v[k+3] = q.w; }
+        if (prop === '.position')   for (let k = 0; k < v.length; k += 3) { const q = new THREE.Vector3(v[k], v[k+1], v[k+2]).applyMatrix4(X); v[k] = q.x; v[k+1] = q.y; v[k+2] = q.z; }
+      }
+    } else if (src.id === m.id) tracks.push(t.clone());     // 道具之類的非骨架軌道只給原本的模型
+  }
+  return m.actions[name] = m.mixer.clipAction(new THREE.AnimationClip(name + '@' + m.i, src.clip.duration, tracks));
+}
+// 換動作（淡入淡出）；loop=false 的播完會自動回到待機
+function play(m, name, loop, fade = 0.3) {
+  const a = action(m, name);
+  if (!a || (a === m.active && loop)) return a;
+  a.reset();
+  a.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+  a.clampWhenFinished = true;
+  a.timeScale = name === PANIC ? 1.2 : m.def.p.speed;
+  a.play();
+  if (m.active && m.active !== a && fade > 0) a.crossFadeFrom(m.active, fade, false);
+  else if (m.active && m.active !== a) m.active.stop();
+  m.active = a; m.oneShot = !loop;
+  return a;
+}
+
+const minions = [];
+async function build(i) {
+  const id = SLOTS[i], def = MODELS[id];
+  const gltf = await loadModel(id);
+  const model = SkeletonUtils.clone(gltf.scene);   // 每個位置各用一份複製，原始檔保持不動
+
+  const holder = new THREE.Group();          // 位置、轉身、跳躍、擠壓都作用在這層
+  const p = slotPos(i);
+  holder.position.set(p.x, 0, p.z);
+  holder.add(model);
+  scene.add(holder);
+
+  const hit = new THREE.Mesh(new THREE.CapsuleGeometry(HEIGHT * 0.35, HEIGHT * 0.4, 4, 8));
+  hit.position.y = HEIGHT * 0.53; hit.visible = false; hit.userData.i = i; holder.add(hit);
+  const m = { i, id, def, holder, model, bones: {}, rest: [], mixer: null, map: {}, actions: {}, active: null, gy: 0, settle: 20, oneShot: false, hit,
+              x: p.x, z: p.z, headY: HEIGHT, sing: 0, target: 0, y: 0, vy: 0, land: 0, yaw: 0, pitch: 0,
+              nextBreak: 3 + def.p.rest[0] + Math.random() * def.p.rest[1], ph: Math.random() * 6.28 };
+  model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+  // 聚光效果用：記住每個材質原本的顏色（別人唱歌時把自己調暗）、腳下光圈、頭上光柱
+  m.mats = [];
+  model.traverse(o => { if (o.isMesh && !m.mats.some(x => x.mat === o.material)) m.mats.push({ mat: o.material, c: o.material.color.clone() }); });
+  const glowColor = new THREE.Color().setHSL(NOTES[i].hue / 360, 1, 0.65);
+  m.glow = new THREE.Mesh(new THREE.CircleGeometry(HEIGHT * 0.55, 40),
+    new THREE.MeshBasicMaterial({ color: glowColor, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.glow.rotation.x = -Math.PI / 2; m.glow.position.set(p.x, 0.012, p.z);
+  m.beam = new THREE.Mesh(new THREE.CylinderGeometry(HEIGHT * 0.12, HEIGHT * 0.6, 4, 32, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xfff6d0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  m.beam.position.set(p.x, 2, p.z);
+  scene.add(m.glow, m.beam);
+  m.spot = 0;
+  holder.position.set(0, 0, 0);
+  holder.updateMatrixWorld(true);
+
+  if (def.static) {
+    // 沒有骨架的模型：用外框量大小，腳踩地、置中
+    model.rotation.y += def.turn;
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    const s = (HEIGHT * def.size) / (box.max.y - box.min.y);
+    model.scale.multiplyScalar(s);
+    model.position.multiplyScalar(s);
+    model.position.x -= (box.min.x + box.max.x) / 2 * s;
+    model.position.y -= box.min.y * s;
+    model.position.z -= (box.min.z + box.max.z) / 2 * s;
+    holder.position.set(p.x, 0, p.z);
+    minions[i] = m;
+    return;
+  }
+
+  const bones = m.bones;
+  model.traverse(o => {
+    if (o.isBone) for (const k in BONES) if (new RegExp(`^Bip001_${BONES[k]}_\\d+$`).test(o.name)) bones[k] = o;
+  });
+
+  // 在還沒套動作的原始站姿下，用骨頭量：腳趾到頭的距離統一，骨盆對準位置中心（服裝大小不影響）
+  const wp = b => b.getWorldPosition(new THREE.Vector3());
+  const head = wp(bones.head), pelvis = wp(bones.pelvis);
+  const toeY = Math.min(wp(bones.toeL).y, wp(bones.toeR).y);
+  const s = (HEIGHT * 0.62) / (head.y - toeY);
+  model.scale.multiplyScalar(s);
+  model.position.multiplyScalar(s);
+  model.position.x -= pelvis.x * s;
+  model.position.y -= toeY * s - 0.03;
+  model.position.z -= pelvis.z * s;
+  holder.position.set(p.x, 0, p.z);
+  m.base = model.position.clone();
+  m.rotY = model.rotation.y; m.fy = 0;
+
+  // 動作：從共用動作庫取用，其他模型的動作也能套（骨架相同）
+  const mixer = m.mixer = new THREE.AnimationMixer(model);
+  model.traverse(o => { const b = o.name.match(/^(Bip001(?:_.+?)?)_\d+$/); if (b) m.map[b[1]] = o.name; });
+
+  // 被程式額外轉動的骨頭，記住原始姿勢，每一格先還原再疊加
+  m.rest = DRIVEN.concat(MOUTH).filter((k, n, all) => bones[k] && all.indexOf(k) === n).map(k => ({ k, b: bones[k], q: bones[k].quaternion.clone(), p: bones[k].position.clone() }));
+  m.mouth = m.rest.filter(r => MOUTH.includes(r.k));
+  m.vowel = 'a'; m.vj = 0; m.vw = 0;
+
+  mixer.addEventListener('finished', e => { if (e.action === m.active) play(m, m.def.idle, true); });
+  play(m, def.idle, true, 0);
+  m.active.time = Math.random() * m.active.getClip().duration;
+  minions[i] = m;
+}
+
+// ====================== 聲音：鋸齒波 + 母音共振峰，模擬人聲 ======================
+const VOWELS = {              // [頻率, Q, 音量]
+  a: [[950, 7, 1.0], [1450, 9, .55], [3100, 10, .22]],
+  o: [[560, 7, 1.0], [1000, 9, .45], [2900, 10, .12]],
+  i: [[340, 8, 1.0], [2700, 12, .40], [3500, 12, .20]],
+  u: [[380, 8, 1.0], [900, 9, .30], [2700, 10, .08]],
+};
+let noiseBuf;
+let ctx, master, mixOut, glottal, flutterBuf;
+const voices = new Map();
+const MIN_LEN = 0.28;
+
+function audio() {
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = ctx.createDynamicsCompressor();
+    master = ctx.createGain();
+    master.gain.value = 0.5;
+    // 出口：乾聲 + 一點點空間殘響（像在小舞台上唱，而不是直接從喇叭冒出來）
+    const bus = ctx.createGain(), verb = ctx.createConvolver(), wet = ctx.createGain();
+    const len = Math.floor(ctx.sampleRate * 1.5), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let k = 0; k < len; k++) d[k] = (Math.random() * 2 - 1) * Math.pow(1 - k / len, 3.2); }
+    verb.buffer = ir; wet.gain.value = 0.2;
+    master.connect(comp); comp.connect(bus); comp.connect(verb).connect(wet).connect(bus);
+    bus.connect(ctx.destination);
+    mixOut = bus;
+    // 聲帶的波形：比鋸齒波柔和（越高的泛音掉得越快），比較接近真的聲帶
+    const N = 48, re = new Float32Array(N), im = new Float32Array(N);
+    for (let n = 1; n < N; n++) im[n] = 1 / Math.pow(n, 1.55);
+    glottal = ctx.createPeriodicWave(re, im);
+    // 人聲不會完全穩：一條慢慢亂飄的曲線，拿來讓音高和音量有細微的不規則起伏
+    const fl = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate), fd = fl.getChannelData(0);
+    let a = 0, b2 = 0;
+    for (let k = 0; k < fd.length; k++) { a += (Math.random() * 2 - 1 - a) * 0.0009; b2 += (a - b2) * 0.0009; fd[k] = b2 * 60; }
+    for (let k = 0; k < 2000; k++) { const w = k / 2000; fd[k] = fd[k] * w + fd[fd.length - 2000 + k] * (1 - w); }   // 接縫處淡入，循環播放才不會喀一聲
+    let mean = 0, peak = 0;                                    // 曲線置中並縮到 ±1：不然整體會偏高或偏低，唱出來就走音
+    for (let k = 0; k < fd.length; k++) mean += fd[k] / fd.length;
+    for (let k = 0; k < fd.length; k++) { fd[k] -= mean; peak = Math.max(peak, Math.abs(fd[k])); }
+    for (let k = 0; k < fd.length; k++) fd[k] /= peak || 1;
+    flutterBuf = fl;
+  }
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+
+// ---------- 唱歌詞：把每個字的拼音拆成「聲母 + 韻母」來合成 ----------
+// 合成器只會發母音，所以韻母用共振峰做得出來（嘴型也照韻母擺），聲母只能用氣音、短暫停頓、鼻音大概帶過
+// 各種母音的三個共振峰（Hz，成人男聲的基準值，之後再乘上每隻自己的聲道大小）
+const FORM = {
+  a: [850, 1220, 2800], o: [560, 900, 2800], e: [540, 1300, 2700], i: [300, 2300, 3200], u: [350, 700, 2700],
+  'ü': [300, 1900, 2500], 'ê': [550, 1900, 2700], er: [500, 1400, 1800], ih: [400, 1500, 2600],
+  n: [300, 1300, 2500], ng: [300, 1000, 2500], m: [280, 1000, 2400], l: [350, 1200, 2700], r: [400, 1400, 1800],
+};
+// 韻母 → 依序經過哪些母音（最後的 n / ng 是鼻音收尾）
+const FINALS = {
+  a: 'a', o: 'o', e: 'e', i: 'i', u: 'u', 'ü': 'ü', ih: 'ih', er: 'er', 'ê': 'ê',
+  ai: 'a i', ei: 'ê i', ao: 'a o', ou: 'o u', an: 'a n', en: 'e n', ang: 'a ng', eng: 'e ng', ong: 'o ng',
+  ia: 'i a', ie: 'i ê', iao: 'i a o', iu: 'i o u', iou: 'i o u', ian: 'i ê n', in: 'i n', iang: 'i a ng', ing: 'i ng', iong: 'ü o ng',
+  ua: 'u a', uo: 'u o', uai: 'u a i', ui: 'u ê i', uei: 'u ê i', uan: 'u a n', un: 'u e n', uen: 'u e n', uang: 'u a ng', ueng: 'u e ng',
+  'üe': 'ü ê', 'üan': 'ü ê n', 'ün': 'ü n',
+};
+// 聲母 → 雜訊的 [中心頻率 Hz, 音量, 長度 ms]；沒列的（b d g m n l r 與零聲母）另外處理
+const NOISE = { f: [6000, .10, 90], s: [6500, .28, 100], sh: [3200, .28, 100], x: [4500, .28, 100], h: [1600, .14, 80],
+                z: [6500, .22, 50], c: [6500, .28, 90], zh: [3200, .22, 50], ch: [3200, .28, 90], j: [4500, .22, 50], q: [4500, .28, 90],
+                p: [1500, .22, 45], t: [4000, .22, 40], k: [2200, .22, 45] };
+const pinyinFn = null;         // 國字轉拼音的函式庫不再載入
+function toSyllables(text) {
+  const chars = [...text].filter(c => /\p{Script=Han}/u.test(c));
+  if (!pinyinFn || !chars.length) return [];
+  const str = chars.join('');
+  const ini = pinyinFn(str, { pattern: 'initial', type: 'array' });
+  const fin = pinyinFn(str, { pattern: 'final', toneType: 'none', type: 'array' });
+  return chars.map((ch, k) => {
+    const c = ini[k] || '';
+    let f = (fin[k] || 'a').replace(/v/g, 'ü').replace(/^ue/, 'üe');
+    if ('jqxy'.includes(c) && c && f[0] === 'u') f = 'ü' + f.slice(1);            // ju qu xu yu 的 u 其實是 ü
+    if (['z', 'c', 's', 'zh', 'ch', 'sh', 'r'].includes(c) && f === 'i') f = 'ih';   // 資、知 這類不是真的「一」
+    return { ch, ini: c, seq: (FINALS[f] || 'a').split(' ') };
+  });
+}
+
+// freq 沒給就唱自己名牌上的音；合唱時由樂譜指定要唱的音高
+// ---------- 人聲取樣庫（voice/bank.wav，由 tools/build_voice_bank.py 產生）----------
+// 真人語音（Kokoro 合成的男聲）唸的音節，加速成小小兵嗓，每個音節有一排音高；長音靠循環中段撐住。
+// 載入成功就用它唱；載入失敗（或網址加 ?synth）才退回下面的電子合成音
+let bank = null;
+const SAMPLE_GAIN = 2.0;
+async function loadBank() {
+  try {
+    const ac = audio();
+    const [info, raw] = await Promise.all([fetch('voice/bank.json').then(r => r.json()), fetch('voice/bank.wav').then(r => r.arrayBuffer())]);
+    const buf = await ac.decodeAudioData(raw);
+    const map = {}, byVowel = {};
+    for (const smp of info.samples) {
+      (map[smp.syl] = map[smp.syl] || []).push(smp);
+      const list = byVowel[smp.vowel] = byVowel[smp.vowel] || [];
+      if (!list.includes(smp.syl)) list.push(smp.syl);
+    }
+    bank = { buf, sr: info.sr, map, byVowel, names: Object.keys(map) };
+  } catch (err) { console.warn('人聲取樣庫載入失敗，改用合成音', err); }
+}
+// 小小兵語：每個音各自抽一個音節。「巴、那」出現得多一點，但不會固定三個一組；
+// 只用 b、m、p、n 開頭的（l、d 這類用舌頭彈的聲母加速後會變成一連串彈舌聲）
+const BABBLE = [['ba', 5], ['na', 5], ['bi', 2], ['bu', 2], ['bo', 2], ['ma', 2], ['mi', 2], ['pa', 1], ['no', 2], ['ni', 1]];
+const BABBLE_TOTAL = BABBLE.reduce((a, b) => a + b[1], 0);
+function babble(avoid) {
+  for (let tries = 0; tries < 6; tries++) {
+    let r = Math.random() * BABBLE_TOTAL;
+    for (const [name, w] of BABBLE) { r -= w; if (r < 0) { if (name !== avoid) return name; break; } }
+  }
+  return 'ba';
+}
+// when：要在音訊時鐘的哪一刻唱到這個音（沒給就是現在）。提早排好時間，節奏才不會被畫面運算拖慢
+function startSample(i, f, loud, dur, when) {
+  const ac = audio(), now = ac.currentTime, t = Math.max(now, when || now), V = voiceOf(i), m = minions[i];
+  const prev = voices.get(i);
+  // 唱哪個音節：選單選「小小兵語」時照音節組走（七成是巴那那）；選了特定母音就只挑那個母音的音節
+  const vsel = document.getElementById('vowel').value;
+  let name;
+  if (bank.byVowel[vsel]) {
+    const names = bank.byVowel[vsel];
+    do { name = names[Math.floor(Math.random() * names.length)]; } while (names.length > 1 && name === m.lastSyl);
+  } else name = babble(m.lastSyl);                           // 不連續重複同一個音節
+  m.lastSyl = name;
+  // 挑哪個音高的取樣：每隻嗓子粗細不同 → 嗓子細的故意挑低一點的取樣再放快，聽起來就更尖
+  const want = 69 + 12 * Math.log2(f / 440) - 12 * Math.log2(V.formant / 1.38);
+  let smp = bank.map[name][0];
+  for (const c of bank.map[name]) if (Math.abs(c.midi - want) < Math.abs(smp.midi - want)) smp = c;
+  const rate = f / smp.f0 * Math.pow(2, (Math.random() * 2 - 1) * 4 / 1200);     // 換算播放速度讓音高落在譜上（每個音隨機偏 ±4 音分）
+  // 很短的音（接在別的音後面時）直接從母音接過去，不重新發聲母，快速的音群才不會一顆一顆卡住
+  // 一句裡只有長音（0.42 秒以上）和少數的音會重新發聲母，其餘都從母音直接滑過去，整句才連得起來
+  const legato = !!prev && (dur < 0.42 ? Math.random() < 0.8 : Math.random() < 0.25);
+  const head = legato ? 0 : smp.hd / bank.sr / rate;           // 聲母佔的時間：提早這麼多開始，母音才會剛好落在拍點上
+  const begin = Math.max(now, t - head);
+  const src = ac.createBufferSource(), env = ac.createGain(), vol = V.vol * loud * SAMPLE_GAIN;
+  src.buffer = bank.buf; src.loop = true;
+  src.loopStart = (smp.off + smp.ls) / bank.sr; src.loopEnd = (smp.off + smp.le) / bank.sr;
+  src.playbackRate.setValueAtTime(rate, begin);
+  env.gain.setValueAtTime(0, begin);
+  env.gain.linearRampToValueAtTime(vol, begin + (legato ? 0.06 : 0.015));
+  if (dur > 0.6) env.gain.setTargetAtTime(vol * 1.12, t + 0.22, 0.25);            // 長音稍微推一點
+  // 前一個音不硬切：在新的母音出來的那一刻才淡掉，兩個音重疊一小段
+  if (prev) {
+    const fade = Math.max(now, t - 0.012);
+    prev.env.gain.cancelScheduledValues(fade);
+    prev.env.gain.setTargetAtTime(0, fade, legato ? 0.045 : 0.03);
+    prev.nodes.forEach(n => n.stop(fade + 0.4));
+  }
+  // 抖音（長音唱穩之後才出來）和細微的不規則飄動
+  const lfo = ac.createOscillator(), lg = ac.createGain(), fl = ac.createBufferSource(), fg = ac.createGain();
+  lfo.frequency.value = V.vib[0] || 6; lg.gain.setValueAtTime(0, begin);
+  if (dur > 0.32) lg.gain.setTargetAtTime(rate * V.vib[1] * Math.min(1.6, 0.7 + dur), t + 0.2, 0.14);
+  fl.buffer = flutterBuf; fl.loop = true; fl.playbackRate.value = 0.8 + Math.random() * 0.5; fg.gain.value = rate * 0.003;
+  lfo.connect(lg).connect(src.playbackRate); fl.connect(fg).connect(src.playbackRate);
+  src.connect(env).connect(master);
+  src.start(begin, (legato ? smp.off + smp.ls : smp.off) / bank.sr); lfo.start(begin); fl.start(begin, Math.random() * 3);
+  voices.set(i, { i, V, nodes: [src, lfo, fl], env, t0: t, sample: true });
+  // 嘴型：等聲音真的出來的那一刻才動；雙唇音先閉嘴再張開成這個音節的母音
+  const ms = performance.now() + (begin - now) * 1000;
+  m.visTL = legato ? [{ at: ms, key: smp.vowel }] : [{ at: ms, key: smp.lips ? 'closed' : smp.vowel }, { at: ms + head * 1000, key: smp.vowel }];
+  singPose(i);
+}
+// 開口時身體的反應：進入唱歌姿勢、名牌亮起、飄音符
+function singPose(i) {
+  const m = minions[i], wasSinging = m.target === 1;
+  m.target = 1;
+  if (m.y === 0 && m.poked) { m.vy = 1.6 * m.def.p.hop; m.poked = false; }
+  const was = m.active, a = play(m, SING, true, 0.28);
+  if (a && a !== was) a.time = 3.4 + Math.random() * 0.6;      // 從正在張嘴唱的那一段開始
+  labels[i].classList.add('on');
+  if (!wasSinging) floatNote(i);
+}
+
+// 一隻開口（合成音版）：建立他的聲帶與聲道，之後同一句裡的每個音都用同一口氣接下去（見 articulate）
+function start(i, freq, loud = 1, syl = null, dur = 0.5, when = 0) {
+  if (!minions[i]) return;
+  if (voices.has(i) && !(bank && !DEBUG.has('synth'))) return;
+  if (bank && !DEBUG.has('synth')) return startSample(i, freq || NOTES[i].freq * 2, loud, dur, when);
+  const ac = audio(), t = ac.currentTime, V = voiceOf(i), m = minions[i];
+  const nodes = [];                                            // 之後要一起停掉的聲源
+  const env = ac.createGain();
+  env.gain.setValueAtTime(0, t);
+  const formants = [0, 1, 2, 3, 4].map(b => {                  // 聲道：五個共振峰（後兩個固定，負責「人聲的亮度」）
+    const bp = ac.createBiquadFilter(), fg = ac.createGain();
+    bp.type = 'bandpass'; bp.Q.value = [6, 8, 9, 9, 9][b]; fg.gain.value = [1, 0.55, 0.22, 0.1, 0.05][b];
+    bp.connect(fg).connect(env);
+    return bp;
+  });
+  const lfo = ac.createOscillator(), lfoGain = ac.createGain();  // 抖音
+  lfo.frequency.value = V.vib[0] || 6; lfoGain.gain.value = 0;
+  lfo.connect(lfoGain); lfo.start(t); nodes.push(lfo);
+  // 細微的不穩定：每隻從曲線的不同位置開始讀，所以每個人飄的方式不一樣
+  const flutter = ac.createBufferSource(), flutterGain = ac.createGain(), shimmer = ac.createGain();
+  flutter.buffer = flutterBuf; flutter.loop = true; flutter.playbackRate.value = 0.8 + Math.random() * 0.5;
+  flutter.connect(flutterGain); flutter.connect(shimmer); shimmer.gain.value = 0.04; shimmer.connect(env.gain);
+  flutter.start(t, Math.random() * 3); nodes.push(flutter);
+  // 胸腔的厚度：基音附近直接通過一點，不然只有共振峰會聽起來空空的
+  const chest = ac.createBiquadFilter(), chestGain = ac.createGain();
+  chest.type = 'lowpass'; chest.frequency.value = 700; chestGain.gain.value = 0.22;
+  chest.connect(chestGain).connect(env);
+  const oscs = [];                                             // 聲帶
+  for (const cents of V.detune ? [0, V.detune] : [0]) {
+    const osc = ac.createOscillator();
+    osc.setPeriodicWave(glottal);
+    lfoGain.connect(osc.frequency);
+    flutterGain.connect(osc.frequency);
+    osc.connect(chest);
+    formants.forEach(bp => osc.connect(bp));
+    osc.start(t); nodes.push(osc); oscs.push({ osc, ratio: Math.pow(2, cents / 1200) });
+  }
+  {                                                            // 氣音：每個人都帶一點，雜訊也通過同一個聲道
+    const n = ac.createBufferSource(), ng = ac.createGain();
+    n.buffer = noise(ac); n.loop = true; ng.gain.value = 0.035 + V.breath;
+    n.connect(ng); formants.forEach(bp => ng.connect(bp));
+    n.start(t); nodes.push(n);
+  }
+  env.connect(master);
+  const v = { i, V, nodes, env, oscs, lfoGain, flutterGain, formants, t0: t };
+  voices.set(i, v);
+  articulate(v, t, freq || NOTES[i].freq * V.oct, loud, syl, dur, true);
+  singPose(i);
+}
+function noise(ac) {
+  if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1; }
+  return noiseBuf;
+}
+
+// 唱一個音（或一個字）。first=false 表示接在前一個音後面：音高用滑的過去、不重新起音，聽起來才像一句話而不是一顆一顆
+function articulate(v, t, f, loud, syl, dur, first) {
+  const ac = ctx, V = v.V, m = minions[v.i], vol = V.vol * loud;
+  // --- 嘴型時間表：[幾秒後, 母音] ---
+  let delay = 0, keys, lead = null;                            // delay：聲母佔掉的時間；lead：開口前的鼻音 / 邊音
+  if (syl) {
+    const c = syl.cont ? '' : syl.ini;
+    const seq = syl.cont ? syl.seq.slice(/^n/.test(syl.seq[syl.seq.length - 1]) ? -2 : -1) : syl.seq;
+    if (NOISE[c]) {                                            // 擦音、塞擦音、送氣音：先出一小段雜訊
+      const [nf, ng, ms] = NOISE[c];
+      const n = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain();
+      n.buffer = noise(ac); n.loop = true; bp.type = 'bandpass'; bp.frequency.value = nf; bp.Q.value = 1.2;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(ng * vol, t + 0.012); g.gain.setTargetAtTime(0, t + ms / 1000, 0.012);
+      n.connect(bp).connect(g).connect(master); n.start(t); n.stop(t + ms / 1000 + 0.15);
+      delay = ms / 1000;
+    } else if (c && 'bdg'.includes(c)) delay = 0.025;           // 不送氣塞音：短暫停頓
+    else if (c && 'mnlr'.includes(c)) lead = c;
+    const body = Math.max(0.12, dur - delay);
+    keys = [];
+    let at = delay;
+    if (lead) { keys.push([at, lead]); at += 0.07; }
+    const tail = seq.length > 1 ? Math.min(0.16, body * 0.3) : 0;
+    seq.forEach((k, n) => {
+      if (n === 0 && seq.length > 1 && 'iuü'.includes(k) && !/^n/.test(seq[1])) { keys.push([at, k]); at += 0.07; }      // 介音：很短
+      else if (n === seq.length - 1 && seq.length > 1) keys.push([Math.max(at + 0.05, delay + body - tail), k]);        // 韻尾：最後一小段
+      else { keys.push([at, k]); at += 0.05; }                                                                          // 主要母音：撐住
+    });
+    const now = performance.now();
+    m.visTL = keys.map(([at2, k]) => ({ at: now + at2 * 1000, key: k }));
+    if (c && 'bpmf'.includes(c)) m.visTL.unshift({ at: now, key: 'closed' });      // 雙唇音開口前先閉嘴
+  } else {
+    const vsel = document.getElementById('vowel').value;
+    const vowel = vsel === 'rand' ? 'aoiu'[Math.floor(Math.random() * 4)] : vsel;
+    m.visTL = null; m.vowel = vowel;
+    keys = [[0, vowel]];
+  }
+  const last = keys[keys.length - 1], nasalEnd = /^n/.test(last[1]);
+
+  v.flutterGain.gain.setTargetAtTime(f * 0.003, t, 0.05);       // 音高不規則的細微飄動（約 ±10 音分以內）
+  f *= Math.pow(2, (Math.random() * 2 - 1) * 5 / 1200);        // 每個音隨機偏一點點（±5 音分），沒有人每次都唱在同一個點上
+  // --- 音高：第一個音從低一點點滑上來；之後的音從上一個音滑過去 ---
+  for (const { osc, ratio } of v.oscs) {
+    const pf = osc.frequency;
+    pf.cancelScheduledValues(t);
+    if (first) { pf.setValueAtTime(f * ratio * 0.96, t); pf.exponentialRampToValueAtTime(f * ratio, t + 0.07); }
+    else pf.setTargetAtTime(f * ratio, t, 0.028);
+  }
+  // --- 抖音：短音不抖；長音唱穩之後才慢慢抖起來，越長抖得越開 ---
+  const vg = v.lfoGain.gain;
+  vg.cancelScheduledValues(t); vg.setTargetAtTime(0, t, 0.03);
+  if (dur > 0.32) vg.setTargetAtTime(f * V.vib[1] * Math.min(1.6, 0.7 + dur), t + 0.18, 0.14);
+  // --- 音量：有聲母就短暫收一下；純母音就一路連過去；長音稍微推一點 ---
+  const eg = v.env.gain, open = lead ? vol * 0.45 : vol;
+  eg.cancelScheduledValues(t);
+  if (first) { eg.setValueAtTime(0, t + delay); eg.linearRampToValueAtTime(open, t + delay + Math.max(V.attack, 0.05)); }
+  else if (delay) { eg.setTargetAtTime(vol * 0.03, t, 0.008); eg.setTargetAtTime(open, t + delay, 0.02); }
+  else if (lead) eg.setTargetAtTime(open, t, 0.015);
+  else { eg.setTargetAtTime(vol * 0.82, t, 0.012); eg.setTargetAtTime(vol, t + 0.045, 0.03); }
+  if (lead) eg.setTargetAtTime(vol, t + delay + 0.08, 0.025);
+  if (nasalEnd) eg.setTargetAtTime(vol * 0.5, t + last[0], 0.035);
+  else if (dur > 0.6) eg.setTargetAtTime(vol * 1.12, t + delay + 0.22, 0.25);
+  // --- 聲道：共振峰照時間表在母音之間滑動 ---
+  v.formants.forEach((bp, b) => {
+    const pf = bp.frequency, hz = k => (b < 3 ? (FORM[k] || FORM.a)[b] : [0, 0, 0, 3500, 4600][b]) * V.formant;
+    pf.cancelScheduledValues(t);
+    if (first) pf.setValueAtTime(hz(keys[0][1]) * (syl ? 1 : 0.85), t);
+    pf.setTargetAtTime(hz(keys[0][1]), t + (first ? 0 : Math.max(0, keys[0][0] - 0.02)), 0.02);
+    for (let k = 1; k < keys.length; k++) pf.setTargetAtTime(hz(keys[k][1]), t + keys[k][0], 0.03);
+  });
+}
+
+// 合唱 / 點唱用：這隻已經在唱就接著唱下一個音，還沒開口就起音
+function sing(i, f, loud, syl, dur, when) {
+  const v = voices.get(i);
+  if (v && !v.sample) return articulate(v, ctx.currentTime, f, loud, syl, dur, false);
+  start(i, f, loud, syl, dur, when);                          // 取樣人聲：每個音換一個音節，和前一個音重疊銜接（見 startSample）
+}
+
+// 立刻收聲（同一隻要緊接著唱下一個音時用）
+function hardStop(i) {
+  const v = voices.get(i);
+  if (!v) return;
+  voices.delete(i);
+  const t = ctx.currentTime;
+  v.env.gain.cancelScheduledValues(t); v.env.gain.setTargetAtTime(0, t, 0.015);
+  v.nodes.forEach(n => n.stop(t + 0.15));
+}
+
+function stop(i, when = 0) {
+  const v = voices.get(i);
+  if (!v) return;
+  voices.delete(i);
+  const t = Math.max(ctx.currentTime, when, v.t0 + MIN_LEN);       // 輕點一下也至少唱完一小聲
+  v.env.gain.cancelScheduledValues(t);
+  v.env.gain.setTargetAtTime(0, t, 0.09);                     // 尾音慢慢收，和下一個音疊在一起
+  v.nodes.forEach(n => n.stop(t + 0.7));
+  setTimeout(() => {
+    if (voices.has(i)) return;
+    const m = minions[i];
+    m.target = 0;                                             // 嘴巴先慢慢閉上
+    labels[i].classList.remove('on');
+    if (m.panic) { m.panic = false; play(m, PANIC, false, 0.2); squeal(i); return; }
+    clearTimeout(m.backTimer);                                // 身體晚一點才換回待機：連續唱的時候就不會在兩種姿勢間抖來抖去
+    m.backTimer = setTimeout(() => { if (!voices.has(i) && m.target === 0 && !m.oneShot) play(m, m.def.idle, true, 0.6); }, 700);
+  }, (t - ctx.currentTime) * 1000 + 120);
+}
+
+// 短促的怪叫聲（抓狂、打招呼用）：同一個人聲合成器，音高快速滑動
+function squeal(i, dur = 1.1, mult = 3, wob = 9, vol = 0.8) {
+  if (!ctx) return;
+  if (bank && !DEBUG.has('synth')) {                           // 取樣人聲版：拿高音的「嗶／巴」加速並上下亂甩
+    const t = ctx.currentTime, list = bank.map[dur < 0.5 ? 'ba' : 'bi'], smp = list[list.length - 1];
+    const src = ctx.createBufferSource(), env = ctx.createGain(), r = (mult >= 3 ? 1.5 : 1.15) * voiceOf(i).formant / 1.38;
+    src.buffer = bank.buf; src.loop = true; src.loopStart = (smp.off + smp.ls) / bank.sr; src.loopEnd = (smp.off + smp.le) / bank.sr;
+    src.playbackRate.setValueAtTime(r, t);
+    for (let k = 1; k <= wob; k++) src.playbackRate.linearRampToValueAtTime(r * (k % 2 ? 1.3 : 0.95), t + dur * k / wob);
+    env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(vol * SAMPLE_GAIN, t + 0.02); env.gain.setTargetAtTime(0, t + dur - 0.1, 0.04);
+    src.connect(env).connect(master); src.start(t, smp.off / bank.sr); src.stop(t + dur + 0.3);
+    return;
+  }                                           // 還沒被點過就不出聲（瀏覽器規定要先有互動）
+  const V = voiceOf(i), t = ctx.currentTime, f = NOTES[i].freq * mult * V.oct / 2;
+  const osc = ctx.createOscillator(); osc.type = V.wave;
+  osc.frequency.setValueAtTime(f, t);
+  for (let k = 1; k <= wob; k++) osc.frequency.linearRampToValueAtTime(f * (k % 2 ? 1.35 : 0.95), t + dur * k / wob);
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(vol * V.vol, t + 0.03); env.gain.setTargetAtTime(0, t + dur - 0.12, 0.04);
+  for (const [ff, q, g] of VOWELS.a) {
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = ff * V.formant; bp.Q.value = q;
+    const fg = ctx.createGain(); fg.gain.value = g;
+    osc.connect(bp).connect(fg).connect(env);
+  }
+  env.connect(master); osc.start(t); osc.stop(t + dur + 0.3);
+}
+// 打招呼：播揮手動作，已經有聲音權限的話再「嗯？」一聲
+function hello(i, delay = 0) {
+  const m = minions[i];
+  if (!m || m.target === 1 || m.oneShot) return;
+  m.nextHello = performance.now() + delay + 9000;
+  setTimeout(() => {
+    if (m.target === 1 || m.oneShot) return;
+    const a = play(m, HELLO, false, 0.25);
+    if (a) a.time = 0.6; else if (m.y === 0) m.vy = 2.2;      // 沒骨架的用跳一下代替揮手
+    squeal(i, 0.28, 2.4, 2, 0.35);
+  }, delay);
+  m.nextHello = performance.now() + delay + 9000;
+}
+
+function floatNote(i) {
+  const m = minions[i];
+  const [sx, sy] = toScreen(m.x, m.headY + 0.25, m.z);
+  const s = document.createElement('span');
+  s.className = 'float';
+  s.textContent = ['♪', '♫', '♩'][Math.floor(Math.random() * 3)];
+  s.style.left = sx + 'px'; s.style.top = sy + 'px';
+  s.style.color = `hsl(${NOTES[i].hue} 95% 75%)`;
+  s.style.setProperty('--dx', (Math.random() * 80 - 40) + 'px');
+  s.style.setProperty('--rot', (Math.random() * 60 - 30) + 'deg');
+  wrap.appendChild(s);
+  s.addEventListener('animationend', () => s.remove());
+}
+
+// ====================== 滑鼠 / 觸控 / 鍵盤 ======================
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2(0, 0);
+const lookPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.5);   // 滑鼠在角色前方 z=2.5 的平面上
+const lookAt = new THREE.Vector3(0, 1.2, 2.5);
+let hover = -1, pressed = false, cur = -1, hasPointer = false;
+
+function pick(e) {
+  const b = canvas.getBoundingClientRect();
+  ndc.set((e.clientX - b.left) / b.width * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  ray.ray.intersectPlane(lookPlane, lookAt);
+  hasPointer = true;
+  const h = ray.intersectObjects(minions.filter(Boolean).map(m => m.hit), false)[0];
+  return h ? h.object.userData.i : -1;
+}
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  try { canvas.setPointerCapture(e.pointerId); } catch {}
+  pressed = true;
+  hover = cur = pick(e);
+  if (cur >= 0) trigger(cur);
+});
+canvas.addEventListener('pointermove', e => {
+  const prev = hover;
+  hover = pick(e);
+  canvas.style.cursor = hover >= 0 ? 'pointer' : 'default';
+  if (hover >= 0 && hover !== prev && !pressed && performance.now() > (minions[hover].nextHello || 0)) hello(hover);
+  if (pressed && hover !== cur) {
+    cur = hover;
+    if (cur >= 0) trigger(cur);
+  }
+});
+function release() { pressed = false; cur = -1; }
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('pointerleave', () => { hover = -1; hasPointer = false; });
+
+window.addEventListener('keydown', e => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || /TEXTAREA|INPUT|SELECT/.test(e.target.tagName)) return;
+  const i = KEYS.indexOf(e.key);
+  if (i >= 0) trigger(i);
+});
+window.addEventListener('blur', () => { [...voices.keys()].forEach(stop); pressed = false; cur = -1; });
+
+// ====================== 動畫 ======================
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const qW = new THREE.Quaternion(), qP = new THREE.Quaternion(), qR = new THREE.Quaternion();
+const UP = new THREE.Vector3(0, 1, 0), RIGHT = new THREE.Vector3(), FWD = new THREE.Vector3();
+// 在世界座標裡把一根骨頭多轉一個角度（不用管骨頭自己的軸向）
+// 在世界座標裡把一根骨頭平移一小段
+const mv = new THREE.Vector3(), ms = new THREE.Vector3();
+function addMove(bone, dir, dist) {
+  if (!bone || !dist) return;
+  bone.parent.getWorldQuaternion(qP); bone.parent.getWorldScale(ms);
+  bone.position.add(mv.copy(dir).multiplyScalar(dist / ms.x).applyQuaternion(qP.invert()));
+}
+function addRot(bone, axis, angle) {
+  if (!bone || !angle) return;
+  bone.getWorldQuaternion(qW);
+  bone.parent.getWorldQuaternion(qP);
+  qR.setFromAxisAngle(axis, angle);
+  bone.quaternion.copy(qP.invert().multiply(qW.premultiply(qR)));
+}
+
+const forced = DEBUG.has('sing') ? Number(DEBUG.get('sing')) : -1;    // 除錯用：?sing=3 讓第 4 隻固定在唱歌姿勢
+let last = performance.now(), dim = 0, lastSing = -9;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000), t = now / 1000;
+  last = now;
+
+  let singer = -1;
+  for (const k of voices.keys()) singer = k;
+  if (forced >= 0) singer = forced;
+
+  // 有人在唱 → 舞台變暗、其他人放慢；音和音之間的短空檔不要閃，所以多撐 0.5 秒
+  if (singer >= 0 || minions.some(m => m && m.target === 1)) lastSing = t;
+  dim = lerp(dim, t - lastSing < 0.5 ? 1 : 0, Math.min(1, dt * 5));
+
+  for (const m of minions) {
+    if (!m) continue;
+    if (forced === m.i && m.target !== 1) { m.target = 1; const a = play(m, SING, true, 0); if (a) a.time = 3.6; m.vowel = DEBUG.get('v') || 'a'; }
+    const k = Math.min(1, dt * 12);
+    m.sing = lerp(m.sing, m.target, Math.min(1, dt * (m.target ? 10 : 5)));
+    const s = m.sing, B = m.bones;
+
+    // 偶爾穿插遊戲原本的小動作（唱歌時不插）
+    if (m.def.breakers.length && !m.oneShot && m.target === 0 && dim < 0.3 && t > m.nextBreak && !DEBUG.has('still')) {
+      const a = play(m, m.def.breakers[Math.floor(Math.random() * m.def.breakers.length)], false);
+      m.nextBreak = t + (a ? a.getClip().duration : 0) + m.def.p.rest[0] + Math.random() * (m.def.p.rest[1] - m.def.p.rest[0]);
+    }
+
+    if (m.mixer) {
+    for (const r of m.rest) { r.b.quaternion.copy(r.q); r.b.position.copy(r.p); }
+    m.mixer.update(dt * (1 - dim * 0.7 * (1 - m.spot)));           // 別人唱歌時自己的動作放慢，不搶戲
+
+    // 動作裡如果有走動，把角色拉回自己的位置上，免得走出隊伍
+    m.model.position.copy(m.base);
+    // 面向也拉回正前方：用兩腳的連線判斷目前朝哪邊，慢慢轉正（有些動作套到別的模型會整隻轉過去）
+    m.model.rotation.y = m.rotY + m.fy;
+    m.holder.updateMatrixWorld(true);
+    m.holder.worldToLocal(B.toeL.getWorldPosition(v3)); m.holder.worldToLocal(B.toeR.getWorldPosition(v3b));
+    const facing = Math.atan2(v3b.z - v3.z, -(v3b.x - v3.x));
+    m.fy -= facing * (m.settle > 0 ? 1 : Math.min(1, dt * 4));
+    m.model.rotation.y = m.rotY + m.fy;
+    m.holder.updateMatrixWorld(true);
+    B.toeL.getWorldPosition(v3); B.toeR.getWorldPosition(v3b);        // 用兩腳中間當「站的位置」（有些動作骨盆會偏離身體）
+    m.holder.worldToLocal(v3.add(v3b).multiplyScalar(0.5));
+    m.model.position.x -= v3.x; m.model.position.z -= v3.z - 0.05;
+    // 腳底貼地：各模型的基準高度不同，用腳趾高度慢慢校正（慢到不會吃掉動作裡的小跳躍）
+    m.model.position.y += m.gy;
+    m.holder.updateMatrixWorld(true);
+    const toe = Math.min(B.toeL.getWorldPosition(v3).y, B.toeR.getWorldPosition(v3).y) - m.holder.position.y;
+    const err = toe - 0.04;                                           // 陷進地面馬上拉回來；離地則慢慢放下（保留動作裡的跳躍）
+    const fix = err * (m.settle-- > 0 || err < 0 ? 1 : Math.min(1, dt * 0.6));
+    m.gy -= fix; m.model.position.y -= fix;
+    }
+
+    // 跳躍（只在開唱那一下）+ 擠壓伸展
+    if (m.vy !== 0 || m.y > 0) {
+      m.vy -= 15 * dt; m.y += m.vy * dt;
+      if (m.y <= 0) { m.y = 0; m.land = Math.min(0.14, Math.abs(m.vy) * 0.05); m.vy = 0; }
+    }
+    m.land = lerp(m.land, 0, Math.min(1, dt * 10));
+    m.holder.position.y = m.y;
+    // 凸顯正在唱的：往前站一步、放大一點、打光；其他人變暗
+    m.spot = lerp(m.spot, m.target, Math.min(1, dt * (m.target ? 9 : 3)));
+    m.holder.position.z = m.z + m.spot * 0.45;
+    const bright = 1 - dim * 0.62 * (1 - m.spot);
+    for (const x of m.mats) x.mat.color.copy(x.c).multiplyScalar(bright);
+    m.glow.material.opacity = m.spot * 0.75; m.glow.position.z = m.holder.position.z;
+    m.beam.material.opacity = m.spot * 0.14;  m.beam.position.z = m.holder.position.z;
+    const sq = 1 + s * 0.03 * Math.sin(t * 16) + (m.mixer ? 0 : 0.012 * Math.sin(t * 2.2 + m.ph)) - m.land + clamp(m.vy * 0.02, -0.03, 0.06);
+    const big = 1 + 0.16 * m.spot;
+    m.holder.scale.set(big / Math.sqrt(sq), big * sq, big / Math.sqrt(sq));
+
+    // 要看哪裡：正在唱的同伴 > 自己唱歌時看觀眾上方 > 滑鼠
+    let tx, ty, tz, w = 1;
+    if (singer >= 0 && singer !== m.i && minions[singer]) { const o = minions[singer]; tx = o.x; ty = HEIGHT * 0.75 + o.y; tz = o.z + 0.5; }
+    else if (singer === m.i) { tx = m.x; ty = 2.6; tz = 6; }
+    else if (hasPointer)     { tx = lookAt.x; ty = lookAt.y; tz = lookAt.z; }
+    else { tx = m.x; ty = HEIGHT * 0.75; tz = 6; w = 0; }                       // 沒有對象時交給原本的動作
+    w *= m.def.p.look;
+    if (m.oneShot) w *= 0.35;                                         // 正在做小動作時少干預
+    const dx = tx - m.x, dz = Math.max(0.6, tz - m.z), dy = ty - HEIGHT * 0.75;
+    m.yaw = lerp(m.yaw, w * clamp(Math.atan2(dx, dz), -1.1, 1.1), Math.min(1, dt * 3.5));
+    m.pitch = lerp(m.pitch, w * clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.5, 0.6), Math.min(1, dt * 5));
+
+    const bodyYaw = m.yaw * (m.mixer ? 0.45 : 0.85);                   // 有骨架的：身體轉一半，剩下的給頭和眼睛
+    m.holder.rotation.y = bodyYaw;
+    if (!m.mixer) {                                                   // 沒骨架的：整隻搖擺、唱歌時後仰
+      const groove = singer >= 0 && singer !== m.i ? 0.05 : 0;
+      m.holder.rotation.z = 0.025 * Math.sin(t * 1.4 + m.ph) + (s * 0.1 + groove) * Math.sin(t * 6 + m.ph);
+      m.holder.rotation.x = -m.pitch * 0.25 - s * 0.12;
+      continue;
+    }
+    m.holder.updateMatrixWorld(true);
+    RIGHT.set(1, 0, 0).applyAxisAngle(UP, bodyYaw);
+    FWD.set(0, 0, 1).applyAxisAngle(UP, bodyYaw);
+
+    const hy = m.yaw * 0.4, hp = -m.pitch * 0.55;
+    const groove = singer >= 0 && singer !== m.i ? 0.05 : 0;          // 別人唱歌時跟著輕輕搖
+    addRot(B.spine, FWD, (s * 0.08 + groove) * m.def.p.sway * Math.sin(t * 6 * m.def.p.speed + m.ph));
+    addRot(B.neck, UP, hy * 0.4);
+    addRot(B.head, UP, hy * 0.6);
+    addRot(B.head, RIGHT, hp - s * 0.12);
+    addRot(B.head, FWD, s * 0.1 * Math.sin(t * 6 + m.ph + 1));
+    for (const e of [B.eyeL, B.eyeR]) { addRot(e, UP, m.yaw * 0.15); addRot(e, RIGHT, -m.pitch * 0.25); }
+
+    // 嘴巴：唱歌時先把動作檔裡的嘴型淡掉，再依正在唱的母音擺出「啊／喔／咿／嗚」
+    for (const r of m.mouth) { r.b.quaternion.slerp(r.q, s); r.b.position.lerp(r.p, s); }
+    if (m.visTL) { const nowMs = performance.now(); for (const v of m.visTL) if (v.at <= nowMs) m.vowel = v.key; }   // 唱歌詞時嘴型照時間表走
+    const vis = VISEME[m.vowel] || VISEME.a, mk = Math.min(1, dt * 22);
+    m.vj = lerp(m.vj, m.target * vis.jaw * (0.85 + 0.15 * m.def.p.jaw), mk);
+    m.vw = lerp(m.vw, m.target * vis.wide, mk);
+    addRot(B.jaw, RIGHT, m.vj * (1 + 0.06 * Math.sin(t * 13 + m.ph)));
+    const mw = m.vw * HEIGHT * 0.034;
+    for (const k of ['cornerL', 'cornerLB', 'comisL']) addMove(B[k], RIGHT, mw);
+    for (const k of ['cornerR', 'cornerRB', 'comisR']) addMove(B[k], RIGHT, -mw);
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+// ====================== 點歌：用簡譜讓整個合唱團唱一首歌 ======================
+// 內建的都是沒有版權問題的老歌；其他歌可以把簡譜貼進輸入框
+const SONGS = {
+  '小星星':   { bpm: 110, key: 0, score: '1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 - |\n5 5 4 4 | 3 3 2 - | 5 5 4 4 | 3 3 2 - |\n1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -' },
+  '歡樂頌':   { bpm: 120, key: 0, score: '3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3. 2_ 2 - |\n3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2. 1_ 1 - |\n2 2 3 1 | 2 3_ 4_ 3 1 | 2 3_ 4_ 3 2 | 1 2 (5) - |\n3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2. 1_ 1 -' },
+  '茉莉花':   { bpm: 76,  key: 0, score: '3 3_ 5_ 6_ [1]_ [1]_ 6_ | 5 5_ 6_ 5 - |\n3 3_ 5_ 6_ [1]_ [1]_ 6_ | 5 5_ 6_ 5 - |\n5 5 5 3_ 5_ | 6 6 5 - | 3 2_ 3_ 5 3_ 2_ | 1 1_ 2_ 1 -' },
+  '兩隻老虎': { bpm: 120, key: 0, score: '1 2 3 1 | 1 2 3 1 | 3 4 5 - | 3 4 5 - |\n5_ 6_ 5_ 4_ 3 1 | 5_ 6_ 5_ 4_ 3 1 | 1 (5) 1 - | 1 (5) 1 -' },
+  '自己貼簡譜': { bpm: 100, key: 0, score: '' },
+};
+const KEY_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const $ = id => document.getElementById(id);
+const songSel = $('song'), scoreBox = $('score'), keySel = $('key'), bpmBox = $('bpm'), demoBtn = $('demo'), editBtn = $('edit'), panel = $('panel');
+for (const name in SONGS) songSel.add(new Option('♪ ' + name, name));
+KEY_NAMES.forEach((k, i) => keySel.add(new Option('1 = ' + k, i)));
+let songOct = 0;      // 整首歌往上或往下移幾個八度（音域太高的歌用 -1）
+function loadSong() {
+  const sg = SONGS[songSel.value];
+  scoreBox.value = sg.score; bpmBox.value = sg.bpm; keySel.value = sg.key; songOct = sg.oct || 0;
+  if (!sg.score) { panel.hidden = false; editBtn.setAttribute('aria-expanded', 'true'); scoreBox.placeholder = '把簡譜貼在這裡，例如：3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3. 2_ 2 -'; resize(); scoreBox.focus(); }
+}
+songSel.addEventListener('change', () => { stopSong(); loadSong(); });
+editBtn.addEventListener('click', () => { panel.hidden = !panel.hidden; editBtn.setAttribute('aria-expanded', String(!panel.hidden)); resize(); });
+loadSong();
+// 只放在自己電腦上的歌（songs.local.js，不進版本庫）：有的話就加進點歌清單
+import('./songs.local.js').then(mod => {
+  for (const name in mod.default) {
+    SONGS[name] = mod.default[name];
+    songSel.add(new Option('♪ ' + name, name), songSel.options[songSel.options.length - 1]);
+  }
+}).catch(() => {});
+
+// 簡譜文字 → [{ midi（休止為 null）, beats }]
+function parseScore(text, key) {
+  const out = []; let oct = 0, acc = 0, tie = false, slur = false, barNext = false, shift = 0, brace = null;
+  for (const c of text) {
+    if (brace !== null) { if (c === '}') { shift = parseInt(brace, 10) || 0; brace = null; } else brace += c; continue; }
+    if (c === '{') { brace = ''; continue; }
+    const lastNote = out[out.length - 1];
+    if (c === '|' || c === '\n') barNext = true;
+    else if (c === '[') oct++; else if (c === ']') oct--; else if (c === '(') oct--; else if (c === ')') oct++;
+    else if (c === '~') tie = true;
+    else if (c === '^') slur = true;
+    else if (c === '#' || c === '♯') acc = 1; else if (c === 'b' || c === '♭') acc = -1;
+    else if (c >= '0' && c <= '7') { out.push({ midi: c === '0' ? null : 60 + key + shift + SEMIS[c - 1] + acc + 12 * oct, beats: 1, tie, slur, bar: barNext }); acc = 0; tie = false; slur = false; barNext = false; }
+    else if (!lastNote) continue;
+    else if (c === "'" || c === '’') { if (lastNote.midi != null) lastNote.midi += 12; }
+    else if (c === ',') { if (lastNote.midi != null) lastNote.midi -= 12; }
+    else if (c === '_') lastNote.beats /= 2; else if (c === '.' || c === '·') lastNote.beats *= 1.5;
+    else if (c === '-' || c === '－' || c === '—') lastNote.beats += 1;
+  }
+  // 連結線：和前一個同音高的音接成一個長音，不重新起音
+  const merged = [];
+  for (const n of out) {
+    const prev = merged[merged.length - 1];
+    if (n.tie && prev && prev.midi === n.midi) prev.beats += n.beats; else merged.push(n);
+  }
+  return merged;
+}
+
+let songTimers = [];
+function stopSong() {
+  songTimers.forEach(clearTimeout); songTimers = [];
+  minions.forEach(m => m && cancelSolo(m));
+  cursor = 0;
+  [...voices.keys()].forEach(stop);
+  demoBtn.textContent = '▶ 合唱';
+}
+// 把目前的簡譜切成一句一句：遇到休止符，或唱滿 6 拍後碰到小節線，就算一句結束
+let phraseCache = { sig: '', list: [] }, cursor = 0;
+function getPhrases() {
+  const sig = [scoreBox.value, keySel.value, bpmBox.value, songOct].join('|');
+  if (sig === phraseCache.sig) return phraseCache.list;
+  const notes = parseScore(scoreBox.value, Number(keySel.value) + 12 * songOct);
+  const beat = 60000 / clamp(Number(bpmBox.value) || 100, 40, 240);
+  // 歌詞對位：一個音配一個字；連結線接起來的音已經併成一個，標 ^ 的音沿用前一個字
+  const syls = [];                                                      // 唱歌詞的功能已關閉（合成器的咬字不夠像），固定唱小小兵語
+  let sk = 0, lastSyl = null;
+  const phrases = [[]];
+  let at = 200, sung = 0;
+  for (const n of notes) {
+    const dur = n.beats * beat;
+    if (n.midi == null) { if (sung >= 2) { phrases.push([]); sung = 0; } }
+    else {
+      if (n.bar && sung >= 6) { phrases.push([]); sung = 0; }
+      let syl = null;
+      if (syls.length) {
+        if (n.slur && lastSyl) syl = { ...lastSyl, cont: true };
+        else if (sk < syls.length) syl = lastSyl = syls[sk++];
+      }
+      phrases[phrases.length - 1].push({ midi: n.midi, at, dur, syl });
+      sung += n.beats;
+    }
+    at += dur;
+  }
+  // 取樣庫的音域是 G3–F5：整首歌太高就整體往下移，移完太低就置中。移的是整首，旋律不變
+  const all = phrases.flat().map(n => n.midi + 12);
+  if (all.length) {
+    const lo = Math.min(...all), hi = Math.max(...all);
+    let sh = hi > 77 ? 77 - hi : 0;
+    if (lo + sh < 55) sh = Math.round(66 - (lo + hi) / 2);
+    for (const ph of phrases) for (const n of ph) n.midi += sh;
+  }
+  phraseCache = { sig, list: phrases.filter(ph => ph.length), end: at };
+  cursor = 0;                                                           // 譜改了就從第一句重新開始
+  return phraseCache.list;
+}
+// 計時器只負責「提早一點叫醒」，真正幾點發聲交給音訊時鐘（LEAD 秒後才是第 0 毫秒），節奏才準
+const LEAD = 0.16;
+// 這個音唱完要不要收聲換氣：一句的最後一個音，或後面隔著休止符
+const breathAfter = (ph, k) => k === ph.length - 1 || ph[k + 1].at - (ph[k].at + ph[k].dur) > 40;
+const noteFreq = midi => 440 * Math.pow(2, (midi + 12 - 69) / 12);       // 統一唱高八度
+
+// 點某一隻：他獨唱這首歌的下一句（唱到最後一句會回到第一句）
+function trigger(i) {
+  const m = minions[i];
+  if (!m) return;
+  const now = performance.now();
+  m.pokes = (m.pokes || []).filter(x => now - x < 450 * m.def.p.pokes); m.pokes.push(now);
+  if (m.pokes.length >= m.def.p.pokes) {                                // 短時間內被連點太多下就會抓狂（每隻忍耐度不同）
+    m.pokes = []; cancelSolo(m);
+    if (voices.has(i)) { m.panic = true; stop(i); } else { play(m, PANIC, false, 0.2); audio(); squeal(i); }
+    return;
+  }
+  const list = getPhrases();
+  if (!list.length) { panel.hidden = false; resize(); scoreBox.focus(); return; }
+  audio();
+  cancelSolo(m);
+  const ph = list[cursor % list.length], t0 = ph[0].at;
+  cursor++;
+  m.poked = true;                                                       // 被點到的那一下小跳一次
+  const T0 = ctx.currentTime + LEAD - t0 / 1000;
+  ph.forEach((n, k) => {
+    m.solo.push(setTimeout(() => sing(i, noteFreq(n.midi), 1, n.syl, n.dur / 1000, T0 + n.at / 1000), n.at - t0));
+    if (breathAfter(ph, k)) m.solo.push(setTimeout(() => stop(i, T0 + (n.at + n.dur - 30) / 1000), n.at - t0 + n.dur));
+  });
+}
+function cancelSolo(m) { (m.solo || []).forEach(clearTimeout); m.solo = []; }
+
+function playSong() {
+  const real = getPhrases();
+  if (!real.length) { panel.hidden = false; resize(); scoreBox.focus(); return; }
+  minions.forEach(m => m && cancelSolo(m));
+  audio();
+  demoBtn.textContent = '■ 停止';
+  const at = phraseCache.end, T0 = ctx.currentTime + LEAD;
+  // 每一句由誰唱：獨唱、二重唱、三重唱輪著來，最後一句全體大合唱。
+  // 重唱時第一個人唱主旋律，第二個人唱低三度的和聲，第三個人和主旋律同音
+  const PATTERN = [1, 1, 2, 1, 3, 2];
+  const order = minions.map((m, i) => i).sort(() => Math.random() - 0.5);
+  const key = Number(keySel.value);
+  const harmony = (midi, role) => {
+    if (role === 0) return midi;
+    if (role === 2) return midi;                                         // 第三個人和主旋律同音（低八度會超出人聲取樣的音域）
+    const rel = ((midi - key) % 12 + 12) % 12, deg = SEMIS.indexOf(rel);
+    if (deg < 0) return midi - 3;                                       // 不在音階裡的音：直接低小三度
+    return midi - ((rel - SEMIS[(deg + 5) % 7] + 12) % 12);             // 音階裡往下數兩個音
+  };
+  let turn = 0;
+  real.forEach((ph, k) => {
+    const size = k === real.length - 1 && real.length >= 4 ? order.length : PATTERN[k % PATTERN.length];
+    for (let j = 0; j < size; j++) {
+      const i = order[(turn + j) % order.length], role = j % 3;
+      const loud = (role === 0 ? 1 : 0.55) / Math.sqrt(Math.min(size, 4));
+      ph.forEach((n, q) => {
+        const f = noteFreq(harmony(n.midi, role));
+        songTimers.push(setTimeout(() => sing(i, f, loud, n.syl, n.dur / 1000, T0 + n.at / 1000), n.at));
+        if (breathAfter(ph, q)) songTimers.push(setTimeout(() => stop(i, T0 + (n.at + n.dur - 30) / 1000), n.at + n.dur));
+      });
+    }
+    turn += size;
+  });
+  songTimers.push(setTimeout(stopSong, at + 400));
+}
+demoBtn.addEventListener('click', () => songTimers.length ? stopSong() : playSong());
+
+// ---------- 錄影：把畫面（3D 舞台）和聲音一起錄成 webm，從頭唱到尾 ----------
+let recording = false;
+async function recordSong() {
+  if (recording || !getPhrases().length) return null;
+  recording = true;
+  stopSong(); audio();
+  const dest = ctx.createMediaStreamDestination();
+  mixOut.connect(dest);
+  const stream = canvas.captureStream(30);
+  dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+  const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t));
+  const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8e6, audioBitsPerSecond: 192e3 });
+  const chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  const done = new Promise(r => rec.onstop = r);
+  scene.background = new THREE.Color(0x241d49);            // 影片沒有網頁背景，補一個底色
+  $('rec').textContent = '⏺ 錄影中…';
+  rec.start(1000);
+  await new Promise(r => setTimeout(r, 600));
+  playSong();
+  while (songTimers.length) await new Promise(r => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 1500));             // 尾音和燈光收完
+  rec.stop(); await done;
+  mixOut.disconnect(dest);
+  scene.background = null;
+  $('rec').textContent = '⏺ 錄影';
+  recording = false;
+  return new Blob(chunks, { type: 'video/webm' });
+}
+$('rec').addEventListener('click', async () => {
+  const blob = await recordSong();
+  if (!blob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = songSel.value + '-小小兵合唱團.webm'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+});
+window.recordSong = recordSong;
+
+// ====================== 開始 ======================
+requestAnimationFrame(frame);
+try {
+  const bankLoading = loadBank();
+  const ids = Object.keys(MODELS);
+  let done = 0;
+  await Promise.all(ids.map(id => loadModel(id).then(g => { addToLib(id, g.animations, g.scene); msg.textContent = `小小兵進場中… ${++done} / ${ids.length}`; })));
+  for (let i = 0; i < SLOTS.length; i++) { await build(i); msg.textContent = `小小兵進場中… ${i + 1} / ${SLOTS.length}`; }
+  await bankLoading;
+  msg.remove();
+  minions.forEach((m, i) => hello(i, 400 + i * 160));       // 進場後從左到右輪流打招呼
+  window.dbg = { LIB, minions, hasBank: () => !!bank, toSyllables, getPhrases, parseScore, SONGS,
+    report: () => minions.filter(m => m.mixer).map(m => { const v = new THREE.Vector3();
+      const t = Math.min(m.bones.toeL.getWorldPosition(v).y, m.bones.toeR.getWorldPosition(v).y), p = m.bones.pelvis.getWorldPosition(v).y;
+      return m.id + ' toe=' + t.toFixed(2) + ' pel=' + p.toFixed(2) + ' gy=' + m.gy.toFixed(2) + ' ' + m.active.getClip().name.slice(4, 28); }).join(' | '), all: (name, time) => minions.forEach(m => { play(m, name, true, 0); if (time != null) { m.active.time = time; m.active.paused = true; } }) };
+  document.title = '小小兵合唱團 ✓';
+} catch (err) {
+  console.error(err);
+  msg.textContent = '模型載入失敗：' + err.message;
+}
+</script>
+</body>
+</html>

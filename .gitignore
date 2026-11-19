@@ -1,0 +1,11 @@
+# 3D 角色模型：有版權，不放進版本庫，請自行準備（見 README）
+models/
+# 早期版本用過的圖片
+img/
+# 只放在自己電腦上的歌
+songs.local.js
+# 錄影輸出
+*.webm
+*.mp4
+# Python 快取
+__pycache__/
