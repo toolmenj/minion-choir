@@ -54,13 +54,17 @@ export default {
 
 ## 聲音是怎麼來的
 
-`voice/bank.wav` 是人聲取樣庫，由 `tools/build_voice_bank.py` 產生：
+`voice/` 裡是人聲取樣庫，由 `tools/build_voice_bank.py` 產生。九隻角色各用一個不同的底聲：
 
-1. 用 [Kokoro](https://github.com/hexgrad/kokoro)（本機語音合成）唸出一批單音節。
+1. 用 [Kokoro](https://github.com/hexgrad/kokoro)（本機語音合成）的九個不同聲音，各唸一批單音節（Bah、Nah、Mee…）。
 2. 整體加速，讓音高和嗓音一起變尖。
-3. 沿著聲帶的每次振動把母音切成小片，再照目標音高重新排列，延長成可以循環的長音。每個取樣做完會量一次音高，不準的不收。
+3. 沿著聲帶的每次振動把母音切成小片，再照目標音高重新排列，延長成可以循環的長音。
+4. 把音量拉平：說話的母音剛開口時比較小聲，循環時也會忽大忽小，不處理的話唱起來會斷斷續續。
+5. 品管：每個取樣做完都量一次音高和平穩度，不合格的不收。
 
-網頁播放時依照量到的頻率換算播放速度，所以音準是準的。取樣庫載入失敗時會退回純合成音；網址加 `?synth` 可以強制用合成音。
+網頁播放時依照量到的頻率換算播放速度，所以音準是準的。同一句裡的音會重疊銜接、音高用滑的、長音加上抖音和氣音；嘴型跟著音節的母音走，身體動作對著節拍。
+
+取樣庫載入失敗時會退回純合成音；網址加 `?synth` 可以強制用合成音。
 
 重建取樣庫需要 `pip install kokoro-onnx soundfile numpy`、ffmpeg，以及 Kokoro 的模型檔。
 
@@ -69,6 +73,6 @@ export default {
 | 檔案 | 內容 |
 |---|---|
 | `index.html` | 全部的程式：3D 場景、動作、互動、發聲、點歌、錄影 |
-| `voice/bank.wav`、`voice/bank.json` | 人聲取樣庫與索引 |
+| `voice/*.flac`、`voice/bank.json` | 人聲取樣庫（每個底聲一個檔）與索引 |
 | `tools/build_voice_bank.py` | 產生取樣庫的程式 |
 | `start.bat` | 啟動本機伺服器並開啟頁面（Windows） |
